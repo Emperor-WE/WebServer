@@ -33,9 +33,11 @@ private:
 	int m_MaxConn;  //最大连接数
 	int m_CurConn;  //当前已使用的连接数
 	int m_FreeConn; //当前空闲的连接数
-	locker lock;
+	//locker lock;
+    Mutex m_lock;
 	list<MYSQL *> connList; //连接池
-	sem reserve;
+	//sem reserve;
+    Semaphore reserve;
 
 public:
 	string m_url;			 //主机地址

@@ -28,8 +28,10 @@ private:
     int m_max_requests;         //请求队列中允许的最大请求数
     pthread_t *m_threads;       //描述线程池的数组，其大小为m_thread_number
     std::list<T *> m_workqueue; //请求队列
-    locker m_queuelocker;       //保护请求队列的互斥锁
-    sem m_queuestat;            //是否有任务需要处理
+    //locker m_queuelocker;       //保护请求队列的互斥锁
+    Mutex m_queuelocker;
+    Semaphore m_queuestat;
+    //sem m_queuestat;            //是否有任务需要处理
     connection_pool *m_connPool;  //数据库
     int m_actor_model;          //模型切换
 };
@@ -63,7 +65,8 @@ threadpool<T>::~threadpool()
 template <typename T>
 bool threadpool<T>::append(T *request, int state)
 {
-    m_queuelocker.lock();
+    Mutex::Lock lock(m_queuelocker);
+    //m_queuelocker.lock();
     if (m_workqueue.size() >= m_max_requests)
     {
         m_queuelocker.unlock();
@@ -71,22 +74,23 @@ bool threadpool<T>::append(T *request, int state)
     }
     request->m_state = state;
     m_workqueue.push_back(request);
-    m_queuelocker.unlock();
-    m_queuestat.post();
+    //m_queuelocker.unlock();
+    m_queuestat.notify();
     return true;
 }
 template <typename T>
 bool threadpool<T>::append_p(T *request)
 {
-    m_queuelocker.lock();
+    Mutex::Lock lock(m_queuelocker);
+    //m_queuelocker.lock();
     if (m_workqueue.size() >= m_max_requests)
     {
         m_queuelocker.unlock();
         return false;
     }
     m_workqueue.push_back(request);
-    m_queuelocker.unlock();
-    m_queuestat.post();
+    //m_queuelocker.unlock();
+    m_queuestat.notify();
     return true;
 }
 template <typename T>
@@ -113,7 +117,7 @@ void threadpool<T>::run()
         m_queuelocker.unlock();
         if (!request)
             continue;
-        if (1 == m_actor_model)
+        if (1 == m_actor_model)     // Reactor模型
         {
             if (0 == request->m_state)
             {
@@ -141,7 +145,7 @@ void threadpool<T>::run()
                     request->timer_flag = 1;
                 }
             }
-        }
+        }   // Proactor模型(默认)
         else
         {
             connectionRAII mysqlcon(&request->mysql, m_connPool);

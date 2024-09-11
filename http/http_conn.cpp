@@ -14,8 +14,9 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
-locker m_lock;
-map<string, string> users;
+//locker m_lock;
+Mutex m_lock;
+map<string, string> users;  // username => passwd
 
 void http_conn::initmysql_result(connection_pool *connPool)
 {
@@ -56,13 +57,13 @@ int setnonblocking(int fd)
     return old_option;
 }
 
-//将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
+//将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT --- 事件只触发一次
 void addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
 {
     epoll_event event;
     event.data.fd = fd;
 
-    if (1 == TRIGMode)
+    if (1 == TRIGMode)  // TODO 这里不止 1 的时候添加边缘触发吧
         event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
     else
         event.events = EPOLLIN | EPOLLRDHUP;
@@ -102,9 +103,10 @@ void http_conn::close_conn(bool real_close)
 {
     if (real_close && (m_sockfd != -1))
     {
-        printf("close %d\n", m_sockfd);
+        LOG_ERROR("[fd %d] closed.", m_sockfd);
         removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
+        // TODO 会不会出现多线程访问冲突
         m_user_count--;
     }
 }
@@ -321,7 +323,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
     }
     else
     {
-        LOG_INFO("oop!unknow header: %s", text);
+        //LOG_INFO("oop!unknow header: %s", text);
     }
     return NO_REQUEST;
 }
@@ -349,7 +351,7 @@ http_conn::HTTP_CODE http_conn::process_read()
     {
         text = get_line();
         m_start_line = m_checked_idx;
-        LOG_INFO("%s", text);
+        //LOG_INFO("%s", text);
         switch (m_check_state)
         {
         case CHECK_STATE_REQUESTLINE:
@@ -593,7 +595,7 @@ bool http_conn::add_response(const char *format, ...)
     m_write_idx += len;
     va_end(arg_list);
 
-    LOG_INFO("request:%s", m_write_buf);
+    //LOG_INFO("request:%s", m_write_buf);
 
     return true;
 }

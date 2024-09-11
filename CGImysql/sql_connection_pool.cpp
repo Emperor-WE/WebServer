@@ -53,7 +53,8 @@ void connection_pool::init(string url, string User, string PassWord, string DBNa
 		++m_FreeConn;
 	}
 
-	reserve = sem(m_FreeConn);
+	//reserve = sem(m_FreeConn);
+    reserve = std::move(Semaphore(m_FreeConn));
 
 	m_MaxConn = m_FreeConn;
 }
@@ -69,7 +70,15 @@ MYSQL *connection_pool::GetConnection()
 
 	reserve.wait();
 	
-	lock.lock();
+	//lock.lock();
+    Mutex::Lock lock(m_lock);
+
+    // 这里应该是需要再次判断的
+    if(0 == connList.size())
+    {
+        lock.unlock();
+        return NULL;
+    }
 
 	con = connList.front();
 	connList.pop_front();
@@ -77,7 +86,7 @@ MYSQL *connection_pool::GetConnection()
 	--m_FreeConn;
 	++m_CurConn;
 
-	lock.unlock();
+	//lock.unlock();
 	return con;
 }
 
@@ -87,15 +96,16 @@ bool connection_pool::ReleaseConnection(MYSQL *con)
 	if (NULL == con)
 		return false;
 
-	lock.lock();
+	//lock.lock();
+    Mutex::Lock lock(m_lock);
 
 	connList.push_back(con);
 	++m_FreeConn;
 	--m_CurConn;
 
-	lock.unlock();
+	//lock.unlock();
 
-	reserve.post();
+	reserve.notify();
 	return true;
 }
 
@@ -103,7 +113,8 @@ bool connection_pool::ReleaseConnection(MYSQL *con)
 void connection_pool::DestroyPool()
 {
 
-	lock.lock();
+	//lock.lock();
+    Mutex::Lock lock(m_lock);
 	if (connList.size() > 0)
 	{
 		list<MYSQL *>::iterator it;
@@ -117,13 +128,21 @@ void connection_pool::DestroyPool()
 		connList.clear();
 	}
 
-	lock.unlock();
+	//lock.unlock();
 }
 
 //当前空闲的连接数
 int connection_pool::GetFreeConn()
 {
-	return this->m_FreeConn;
+    // 此处应该加锁
+    //lock.lock();
+    Mutex::Lock lock(m_lock);
+    
+    int ret = this->m_FreeConn;
+
+    //lock.unlock();
+
+	return ret;
 }
 
 connection_pool::~connection_pool()

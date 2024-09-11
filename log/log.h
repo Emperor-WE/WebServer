@@ -22,7 +22,7 @@ public:
 
     static void *flush_log_thread(void *args)
     {
-        Log::get_instance()->async_write_log();
+        return Log::get_instance()->async_write_log();
     }
     //可选择的参数有日志文件、日志缓冲区大小、最大行数以及最长日志条队列
     bool init(const char *file_name, int close_log, int log_buf_size = 8192, int split_lines = 5000000, int max_queue_size = 0);
@@ -44,6 +44,8 @@ private:
             fputs(single_log.c_str(), m_fp);
             m_mutex.unlock();
         }
+
+        return NULL;
     }
 
 private:
@@ -57,7 +59,9 @@ private:
     char *m_buf;
     block_queue<string> *m_log_queue; //阻塞队列
     bool m_is_async;                  //是否同步标志位
-    locker m_mutex;
+    //locker m_mutex;
+    Mutex m_mutex;
+
     int m_close_log; //关闭日志
 };
 

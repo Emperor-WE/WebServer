@@ -26,6 +26,7 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
     if (max_queue_size >= 1)
     {
         m_is_async = true;
+        //TODO 似乎没有释放资源
         m_log_queue = new block_queue<string>(max_queue_size);
         pthread_t tid;
         //flush_log_thread为回调函数,这里表示创建线程异步写日志
@@ -75,23 +76,23 @@ void Log::write_log(int level, const char *format, ...)
     time_t t = now.tv_sec;
     struct tm *sys_tm = localtime(&t);
     struct tm my_tm = *sys_tm;
-    char s[16] = {0};
+    char s[32] = {0};
     switch (level)
     {
     case 0:
-        strcpy(s, "[debug]:");
+        strcpy(s, "\033[0;32;32m[debug]\033[0m");
         break;
     case 1:
-        strcpy(s, "[info]:");
+        strcpy(s, "\033[0;32;32m[info]\033[0m");
         break;
     case 2:
-        strcpy(s, "[warn]:");
+        strcpy(s, "\033[0;35m[warn]\033[0m");
         break;
     case 3:
-        strcpy(s, "[erro]:");
+        strcpy(s, "\033[0;32;31m[erro]\033[0m");
         break;
     default:
-        strcpy(s, "[info]:");
+        strcpy(s, "\033[0;32;32m[info]\033[0m");
         break;
     }
     //写入一个log，对m_count++, m_split_lines最大行数
@@ -130,9 +131,10 @@ void Log::write_log(int level, const char *format, ...)
     m_mutex.lock();
 
     //写入的具体时间内容格式
-    int n = snprintf(m_buf, 48, "%d-%02d-%02d %02d:%02d:%02d.%06ld %s ",
+    // TODO 这里的 m_buf 是不是很可能越界
+    int n = snprintf(m_buf, 48, "%d-%02d-%02d %02d:%02d:%02d %s ",
                      my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday,
-                     my_tm.tm_hour, my_tm.tm_min, my_tm.tm_sec, now.tv_usec, s);
+                     my_tm.tm_hour, my_tm.tm_min, my_tm.tm_sec, s);
     
     int m = vsnprintf(m_buf + n, m_log_buf_size - n - 1, format, valst);
     m_buf[n + m] = '\n';
@@ -147,9 +149,10 @@ void Log::write_log(int level, const char *format, ...)
     }
     else
     {
-        m_mutex.lock();
+        //m_mutex.lock();
+        Mutex::Lock lock(m_mutex);
         fputs(log_str.c_str(), m_fp);
-        m_mutex.unlock();
+        //m_mutex.unlock();
     }
 
     va_end(valst);
@@ -157,8 +160,9 @@ void Log::write_log(int level, const char *format, ...)
 
 void Log::flush(void)
 {
-    m_mutex.lock();
+    //m_mutex.lock();
+    Mutex::Lock lock(m_mutex);
     //强制刷新写入流缓冲区
     fflush(m_fp);
-    m_mutex.unlock();
+    //m_mutex.unlock();
 }

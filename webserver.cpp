@@ -78,9 +78,9 @@ void WebServer::log_write()
     {
         //初始化日志
         if (1 == m_log_write)
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 800);
+            Log::get_instance()->init("./ServerLog", m_close_log, 5000, 800000, 800);
         else
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 0);
+            Log::get_instance()->init("./ServerLog", m_close_log, 5000, 800000, 0);
     }
 }
 
@@ -106,9 +106,10 @@ void WebServer::eventListen()
     m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
     assert(m_listenfd >= 0);
 
-    //优雅关闭连接
+    //优雅关闭连接 --- 用于决定 socket 在关闭时是否等待未发送的数据全部发送完成。
     if (0 == m_OPT_LINGER)
     {
+        //(是否启用linger，等待的时间s)
         struct linger tmp = {0, 1};
         setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
     }
@@ -140,6 +141,7 @@ void WebServer::eventListen()
     assert(m_epollfd != -1);
 
     utils.addfd(m_epollfd, m_listenfd, false, m_LISTENTrigmode);
+    // TODO 这里赋值的话，岂不是使得 http_conn::epfd 不能监听多少
     http_conn::m_epollfd = m_epollfd;
 
     ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
@@ -149,7 +151,8 @@ void WebServer::eventListen()
 
     utils.addsig(SIGPIPE, SIG_IGN);
     utils.addsig(SIGALRM, utils.sig_handler, false);
-    utils.addsig(SIGTERM, utils.sig_handler, false);
+    // TODO 添加了两遍
+    //utils.addsig(SIGTERM, utils.sig_handler, false);
 
     alarm(TIMESLOT);
 
@@ -194,7 +197,7 @@ void WebServer::deal_timer(util_timer *timer, int sockfd)
         utils.m_timer_lst.del_timer(timer);
     }
 
-    LOG_INFO("close fd %d", users_timer[sockfd].sockfd);
+    LOG_INFO("[fd %d] closed", users_timer[sockfd].sockfd);
 }
 
 bool WebServer::dealclientdata()
@@ -215,6 +218,7 @@ bool WebServer::dealclientdata()
             LOG_ERROR("%s", "Internal server busy");
             return false;
         }
+        LOG_INFO("[new client %d] connect to server.", connfd);
         timer(connfd, client_address);
     }
 
